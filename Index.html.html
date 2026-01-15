@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gait Analysis Pro - Walking Balance Assessment</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.95;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .video-section {
+            padding: 20px;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100%;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            aspect-ratio: 4/3;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            flex: 1;
+            min-width: 120px;
+            padding: 12px 20px;
+            font-size: 1em;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-start {
+            background: #10b981;
+            color: white;
+        }
+
+        .btn-start:hover:not(:disabled) {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16,185,129,0.4);
+        }
+
+        .btn-start:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-stop {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-stop:hover:not(:disabled) {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239,68,68,0.4);
+        }
+
+        .btn-stop:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-reset {
+            background: #6b7280;
+            color: white;
+        }
+
+        .btn-reset:hover {
+            background: #4b5563;
+            transform: translateY(-2px);
+        }
+
+        .stats-section {
+            padding: 20px;
+            background: white;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .live-metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .metric-mini {
+            background: #f3f4f6;
+            padding: 10px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 0.8em;
+            color: #6b7280;
+            margin-bottom: 5px;
+        }
+
+        .metric-value {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .metric-value.warning {
+            color: #f59e0b;
+        }
+
+        .metric-value.danger {
+            color: #ef4444;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.recording {
+            background: #ef4444;
+        }
+
+        .status-indicator.idle {
+            background: #9ca3af;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .results-section {
+            grid-column: 1 / -1;
+            padding: 20px;
+        }
+
+        .results-title {
+            font-size: 1.3em;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #111;
+        }
+
+        .score-display {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .score-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .score-percentage {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .score-label {
+            font-size: 0.95em;
+            opacity: 0.9;
+        }
+
+        .feedback-section {
+            background: #f0fdf4;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .feedback-title {
+            font-weight: bold;
+            color: #059669;
+            margin-bottom: 10px;
+        }
+
+        .feedback-list {
+            list-style: none;
+            color: #166534;
+        }
+
+        .feedback-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(16,185,129,0.2);
+        }
+
+        .feedback-list li:last-child {
+            border-bottom: none;
+        }
+
+        .feedback-list li:before {
+            content: "✓ ";
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .warning-section {
+            background: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .warning-title {
+            font-weight: bold;
+            color: #d97706;
+            margin-bottom: 10px;
+        }
+
+        .warning-list {
+            list-style: none;
+            color: #92400e;
+        }
+
+        .warning-list li {
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(245,158,11,0.2);
+        }
+
+        .warning-list li:last-child {
+            border-bottom: none;
+        }
+
+        .warning-list li:before {
+            content: "⚠ ";
+            color: #f59e0b;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .export-btn {
+            background: #3b82f6;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .export-btn:hover {
+            background: #2563eb;
+            transform: translateY(-2px);
+        }
+
+        .disclaimer {
+            background: #eff6ff;
+            border-left: 4px solid #3b82f6;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            color: #1e40af;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚶 Gait Analysis Pro</h1>
+            <p>Real-time walking balance & posture assessment</p>
+        </div>
+
+        <div class="main-content">
+            <!-- VIDEO SECTION -->
+            <div class="card">
+                <div class="video-section">
+                    <h2 style="font-size: 1.2em; margin-bottom: 15px; color: #111;">Live Video Feed</h2>
+                    <div class="video-container">
+                        <video id="video" autoplay playsinline></video>
+                        <canvas id="canvas"></canvas>
+                    </div>
+                    <div class="controls">
+                        <button class="btn-start" id="startBtn" onclick="startAnalysis()">▶ Start</button>
+                        <button class="btn-stop" id="stopBtn" onclick="stopAnalysis()" disabled>⏹ Stop</button>
+                        <button class="btn-reset" id="resetBtn" onclick="resetAnalysis()">↻ Reset</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STATS SECTION -->
+            <div class="card">
+                <div class="stats-section">
+                    <h2 style="font-size: 1.2em; margin-bottom: 15px; color: #111;">Live Metrics</h2>
+                    
+                    <div class="stat-card">
+                        <span class="stat-label">
+                            <span class="status-indicator idle" id="statusIndicator"></span>
+                            Session Status
+                        </span>
+                        <span class="stat-value" id="statusText">Idle</span>
+                    </div>
+
+                    <div class="live-metrics">
+                        <div class="metric-mini">
+                            <div class="metric-label">Steps Detected</div>
+                            <div class="metric-value" id="stepCount">0</div>
+                        </div>
+                        <div class="metric-mini">
+                            <div class="metric-label">Duration</div>
+                            <div class="metric-value" id="durationText">0:00</div>
+                        </div>
+                    </div>
+
+                    <div class="live-metrics">
+                        <div class="metric-mini">
+                            <div class="metric-label">L/R Symmetry</div>
+                            <div class="metric-value" id="symmetryLive">—</div>
+                        </div>
+                        <div class="metric-mini">
+                            <div class="metric-label">Posture Quality</div>
+                            <div class="metric-value" id="postureQualityLive">—</div>
+                        </div>
+                    </div>
+
+                    <div class="live-metrics">
+                        <div class="metric-mini">
+                            <div class="metric-label">Body Detection</div>
+                            <div class="metric-value" id="confidenceLive">—</div>
+                        </div>
+                        <div class="metric-mini">
+                            <div class="metric-label">Balance Score</div>
+                            <div class="metric-value" id="balanceLive">—</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RESULTS SECTION -->
+            <div class="card results-section hidden" id="resultsSection">
+                <div class="results-title">📊 Session Analysis Results</div>
+
+                <div class="score-display">
+                    <div class="score-box">
+                        <div class="score-percentage" id="overallScore">0%</div>
+                        <div class="score-label">Overall Balance Score</div>
+                    </div>
+                    <div class="score-box">
+                        <div class="score-percentage" id="symmetryScore">0%</div>
+                        <div class="score-label">Bilateral Symmetry</div>
+                    </div>
+                    <div class="score-box">
+                        <div class="score-percentage" id="postureScore">0%</div>
+                        <div class="score-label">Posture Quality</div>
+                    </div>
+                    <div class="score-box">
+                        <div class="score-percentage" id="stepScoreDisplay">0</div>
+                        <div class="score-label">Total Steps</div>
+                    </div>
+                </div>
+
+                <div id="feedbackContainer"></div>
+
+                <button class="export-btn" onclick="exportResults()">📥 Export Results as PDF</button>
+
+                <div class="disclaimer">
+                    <strong>⚠️ Medical Disclaimer:</strong> This analysis is for personal awareness and educational purposes only. Results should not replace professional physical therapy assessment. Consult a healthcare provider for clinical gait analysis and rehabilitation guidance.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const videoElement = document.getElementById('video');
+        const canvasElement = document.getElementById('canvas');
+        const ctx = canvasElement.getContext('2d');
+
+        let pose;
+        let camera;
+        let isAnalyzing = false;
+        let sessionData = {
+            frames: [],
+            steps: 0,
+            startTime: null,
+            landmarks: [],
+            symmetryValues: [],
+            postureQualityValues: [],
+            balanceValues: [],
+            confidenceValues: []
+        };
+
+        // Initialize MediaPipe Pose
+        async function initPose() {
+            pose = new Pose({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            });
+
+            pose.onResults(onPoseResults);
+
+            camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    await pose.send({ image: videoElement });
+                },
+                width: 1280,
+                height: 720
+            });
+        }
+
+        function onPoseResults(results) {
+            ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+
+            if (results.poseLandmarks && results.poseLandmarks.length > 0) {
+                drawPose(results.poseLandmarks);
+
+                if (isAnalyzing) {
+                    analyzeFrame(results.poseLandmarks);
+                }
+            }
+        }
+
+        function drawPose(landmarks) {
+            const connections = [
+                [11, 12], [11, 23], [12, 24], [23, 24],
+                [11, 13], [13, 15], [12, 14], [14, 16],
+                [23, 25], [25, 27], [24, 26], [26, 28]
+            ];
+
+            // Draw connections
+            connections.forEach(([start, end]) => {
+                const startLm = landmarks[start];
+                const endLm = landmarks[end];
+
+                if (startLm.visibility > 0.5 && endLm.visibility > 0.5) {
+                    ctx.strokeStyle = '#00ff00';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(startLm.x * canvasElement.width, startLm.y * canvasElement.height);
+                    ctx.lineTo(endLm.x * canvasElement.width, endLm.y * canvasElement.height);
+                    ctx.stroke();
+                }
+            });
+
+            // Draw joints
+            landmarks.forEach((landmark, idx) => {
+                if (landmark.visibility > 0.5) {
+                    const criticalJoints = [11, 12, 23, 24, 25, 26, 27, 28];
+                    ctx.fillStyle = criticalJoints.includes(idx) ? '#00ff00' : '#ffff00';
+                    ctx.beginPath();
+                    ctx.arc(landmark.x * canvasElement.width, landmark.y * canvasElement.height, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            });
+        }
+
+        function analyzeFrame(landmarks) {
+            const frameData = {
+                timestamp: Date.now(),
+                landmarks: landmarks
+            };
+
+            sessionData.frames.push(frameData);
+            sessionData.landmarks.push(landmarks);
+
+            // Calculate metrics
+            const symmetry = calculateSymmetry(landmarks);
+            const postureQuality = calculatePostureQuality(landmarks);
+            const balance = calculateBalance(landmarks);
+            const confidence = calculateConfidence(landmarks);
+
+            sessionData.symmetryValues.push(symmetry);
+            sessionData.postureQualityValues.push(postureQuality);
+            sessionData.balanceValues.push(balance);
+            sessionData.confidenceValues.push(confidence);
+
+            // Update live display
+            document.getElementById('symmetryLive').textContent = symmetry.toFixed(0) + '%';
+            document.getElementById('postureQualityLive').textContent = postureQuality.toFixed(0) + '%';
+            document.getElementById('balanceLive').textContent = balance.toFixed(0) + '%';
+            document.getElementById('confidenceLive').textContent = confidence.toFixed(0) + '%';
+
+            // Detect steps
+            detectSteps(landmarks);
+        }
+
+        function calculateSymmetry(landmarks) {
+            // Compare left and right side positions
+            const leftShoulder = landmarks[11];
+            const rightShoulder = landmarks[12];
+            const leftHip = landmarks[23];
+            const rightHip = landmarks[24];
+            const leftAnkle = landmarks[27];
+            const rightAnkle = landmarks[28];
+
+            const shoulderDiff = Math.abs(leftShoulder.y - rightShoulder.y);
+            const hipDiff = Math.abs(leftHip.y - rightHip.y);
+            const ankleDiff = Math.abs(leftAnkle.y - rightAnkle.y);
+
+            const avgDiff = (shoulderDiff + hipDiff + ankleDiff) / 3;
+            const symmetryScore = Math.max(0, 100 - (avgDiff * 200));
+
+            return Math.min(100, symmetryScore);
+        }
+
+        function calculatePostureQuality(landmarks) {
+            // Check for forward lean
+            const shoulder = landmarks[11];
+            const hip = landmarks[23];
+            const ankle = landmarks[27];
+
+            const forwardLean = Math.abs(shoulder.x - hip.x);
+            const leaning = forwardLean > 0.1 ? 0 : 100;
+
+            // Check spine alignment
+            const spine = Math.abs(landmarks[11].x - landmarks[23].x);
+            const alignment = spine < 0.15 ? 100 : 60;
+
+            const postureScore = (leaning + alignment) / 2;
+            return Math.min(100, postureScore);
+        }
+
+        function calculateBalance(landmarks) {
+            const leftHip = landmarks[23];
+            const rightHip = landmarks[24];
+            const leftAnkle = landmarks[27];
+            const rightAnkle = landmarks[28];
+
+            const hipWidth = Math.abs(leftHip.x - rightHip.x);
+            const ankleWidth = Math.abs(leftAnkle.x - rightAnkle.x);
+            const widthRatio = ankleWidth / (hipWidth + 0.001);
+
+            const balanceScore = Math.abs(1 - widthRatio) < 0.3 ? 100 : 60;
+            return balanceScore;
+        }
+
+        function calculateConfidence(landmarks) {
+            const criticalJoints = [11, 12, 23, 24, 25, 26, 27, 28];
+            const visibilities = criticalJoints.map(idx => landmarks[idx].visibility * 100);
+            return visibilities.reduce((a, b) => a + b) / visibilities.length;
+        }
+
+        function detectSteps(landmarks) {
+            const ankles = [landmarks[27], landmarks[28]];
+            const lastFrame = sessionData.frames[sessionData.frames.length - 2];
+
+            if (lastFrame && lastFrame.landmarks) {
+                const lastAnkles = [lastFrame.landmarks[27], lastFrame.landmarks[28]];
+                
+                ankles.forEach((ankle, idx) => {
+                    const lastAnkle = lastAnkles[idx];
+                    const verticalMovement = Math.abs(ankle.y - lastAnkle.y);
+
+                    if (verticalMovement > 0.05 && !sessionData.lastStepTimes) {
+                        sessionData.lastStepTimes = {};
+                    }
+
+                    if (!sessionData.lastStepTimes) sessionData.lastStepTimes = {};
+
+                    const now = Date.now();
+                    if (!sessionData.lastStepTimes[idx] || now - sessionData.lastStepTimes[idx] > 300) {
+                        if (verticalMovement > 0.05) {
+                            sessionData.steps++;
+                            sessionData.lastStepTimes[idx] = now;
+                            document.getElementById('stepCount').textContent = sessionData.steps;
+                        }
+                    }
+                });
+            }
+        }
+
+        function startAnalysis() {
+            if (!camera) return;
+
+            isAnalyzing = true;
+            sessionData = {
+                frames: [],
+                steps: 0,
+                startTime: Date.now(),
+                landmarks: [],
+                symmetryValues: [],
+                postureQualityValues: [],
+                balanceValues: [],
+                confidenceValues: [],
+                lastStepTimes: {}
+            };
+
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('statusText').textContent = 'Recording...';
+            document.getElementById('statusIndicator').classList.remove('idle');
+            document.getElementById('statusIndicator').classList.add('recording');
+
+            updateDuration();
+            sessionData.durationInterval = setInterval(updateDuration, 1000);
+        }
+
+        function stopAnalysis() {
+            isAnalyzing = false;
+            clearInterval(sessionData.durationInterval);
+
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('statusText').textContent = 'Analysis Complete';
+            document.getElementById('statusIndicator').classList.remove('recording');
+            document.getElementById('statusIndicator').classList.add('idle');
+
+            generateResults();
+        }
+
+        function resetAnalysis() {
+            isAnalyzing = false;
+            clearInterval(sessionData.durationInterval);
+            sessionData = {
+                frames: [],
+                steps: 0,
+                startTime: null,
+                landmarks: [],
+                symmetryValues: [],
+                postureQualityValues: [],
+                balanceValues: [],
+                confidenceValues: []
+            };
+
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('statusText').textContent = 'Idle';
+            document.getElementById('statusIndicator').classList.remove('recording');
+            document.getElementById('statusIndicator').classList.add('idle');
+            document.getElementById('stepCount').textContent = '0';
+            document.getElementById('durationText').textContent = '0:00';
+            document.getElementById('symmetryLive').textContent = '—';
+            document.getElementById('postureQualityLive').textContent = '—';
+            document.getElementById('balanceLive').textContent = '—';
+            document.getElementById('confidenceLive').textContent = '—';
+            document.getElementById('resultsSection').classList.add('hidden');
+        }
+
+        function updateDuration() {
+            if (!sessionData.startTime) return;
+            const elapsed = Math.floor((Date.now() - sessionData.startTime) / 1000);
+            const mins = Math.floor(elapsed / 60);
+            const secs = elapsed % 60;
+            document.getElementById('durationText').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function generateResults() {
+            if (sessionData.symmetryValues.length === 0) {
+                alert('No data collected. Please record a session first.');
+                return;
+            }
+
+            const avgSymmetry = sessionData.symmetryValues.reduce((a, b) => a + b) / sessionData.symmetryValues.length;
+            const avgPosture = sessionData.postureQualityValues.reduce((a, b) => a + b) / sessionData.postureQualityValues.length;
+            const avgBalance = sessionData.balanceValues.reduce((a, b) => a + b) / sessionData.balanceValues.length;
+            const overallScore = (avgSymmetry + avgPosture + avgBalance) / 3;
+
+            document.getElementById('overallScore').textContent = Math.round(overallScore) + '%';
+            document.getElementById('symmetryScore').textContent = Math.round(avgSymmetry) + '%';
+            document.getElementById('postureScore').textContent = Math.round(avgPosture) + '%';
+            document.getElementById('stepScoreDisplay').textContent = sessionData.steps;
+
+            // Generate feedback
+            let feedback = [];
+            let warnings = [];
+
+            if (avgSymmetry > 80) {
+                feedback.push('Excellent bilateral symmetry detected');
+            } else if (avgSymmetry > 60) {
+                feedback.push('Good balance between left and right sides');
+            } else {
+                warnings.push('Noticeable asymmetry detected - check if favoring one leg');
+            }
+
+            if (avgPosture > 80) {
+                feedback.push('Strong upright posture maintained');
+            } else if (avgPosture > 60) {
+                feedback.push('Moderate posture quality - watch for forward lean');
+            } else {
+                warnings.push('Significant postural deviations - may indicate compensatory patterns');
+            }
+
+            if (overallScore > 80) {
+                feedback.push('Overall gait quality is excellent');
+            } else if (overallScore > 60) {
+                feedback.push('Generally acceptable gait pattern');
+            } else {
+                warnings.push('Overall gait shows significant imbalances - seek professional guidance');
+            }
+
+            if (sessionData.steps > 20) {
+                feedback.push(`Completed ${sessionData.steps} walking steps`);
+            }
+
+            const feedbackHtml = `
+                <div class="feedback-section">
+                    <div class="feedback-title">✓ Positive Findings</div>
+                    <ul class="feedback-list">
+                        ${feedback.map(f => `<li>${f}</li>`).join('')}
+                    </ul>
+                </div>
+                ${warnings.length > 0 ? `
+                <div class="warning-section">
+                    <div class="warning-title">⚠ Areas for Improvement</div>
+                    <ul class="warning-list">
+                        ${warnings.map(w => `<li>${w}</li>`).join('')}
+                    </ul>
+                </div>
+                ` : ''}
+            `;
+
+            document.getElementById('feedbackContainer').innerHTML = feedbackHtml;
+            document.getElementById('resultsSection').classList.remove('hidden');
+        }
+
+        function exportResults() {
+            const timestamp = new Date().toLocaleString();
+            const results = `
+GAIT ANALYSIS SESSION REPORT
+Generated: ${timestamp}
+
+═══════════════════════════════════════════════════════════
+
+OVERALL METRICS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Overall Balance Score:        ${document.getElementById('overallScore').textContent}
+Bilateral Symmetry:           ${document.getElementById('symmetryScore').textContent}
+Posture Quality:              ${document.getElementById('postureScore').textContent}
+Total Steps Detected:         ${document.getElementById('stepScoreDisplay').textContent}
+
+═══════════════════════════════════════════════════════════
+
+INTERPRETATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+80-100% Balance Score:   Excellent gait quality and symmetry
+60-79% Balance Score:    Acceptable with minor compensations
+Below 60% Balance Score: Significant imbalances - seek professional assessment
+
+═══════════════════════════════════════════════════════════
+
+IMPORTANT DISCLAIMER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+This analysis is for personal awareness and educational purposes only.
+It does NOT replace professional medical or physical therapy assessment.
+
+For rehabilitation after accidents or surgery, consult a licensed
+physical therapist or rehabilitation specialist for:
+- Proper assessment of your specific condition
+- Personalized rehabilitation protocols
+- Professional monitoring of your recovery
+- Guidance on when to progress exercises
+
+═══════════════════════════════════════════════════════════
+
+SESSION NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Factors affecting accuracy:
+✓ Lighting conditions during recording
+✓ Camera angle and distance
+✓ Clothing (loose/fitted)
+✓ Background clarity
+✓ Full body visibility
+
+Recommendations for next session:
+→ Ensure adequate, consistent lighting
+→ Record from side view (sagittal plane) for best results
+→ Wear fitted clothing to allow joint visibility
+→ Maintain steady camera distance (3-8 feet away)
+→ Record straight-line walking if possible
+
+═══════════════════════════════════════════════════════════
+`;
+
+            const element = document.createElement('a');
+            element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(results));
+            element.setAttribute('download', `gait-analysis-${new Date().getTime()}.txt`);
+            element.style.display = 'none';
+            document.body.appendChild(element);
+            element.click();
+            document.body.removeChild(element);
+        }
+
+        // Initialize on load
+        window.addEventListener('load', initPose);
+
+        // Request camera permission and start video
+        async function startCamera() {
+            try {
+                await camera.initialize();
+            } catch (error) {
+                console.error('Camera error:', error);
+                alert('Unable to access camera. Please ensure you have granted camera permissions.');
+            }
+        }
+
+        window.addEventListener('load', () => {
+            initPose().then(() => {
+                startCamera();
+            });
+        });
+    </script>
+</body>
+</html>
